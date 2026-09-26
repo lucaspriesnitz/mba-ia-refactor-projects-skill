@@ -1,2 +1,14 @@
 flask==3.1.1
 flask-cors==5.0.1
+
+# Dependencias usadas diretamente pelo codigo (vem com o Flask, mas ficam
+# explicitas porque importamos): werkzeug.security para hash de senha e
+# itsdangerous para assinar a credencial emitida no login.
+Werkzeug==3.1.8
+itsdangerous==2.2.0
+
+# Transitivas fixadas para o ambiente ser reproduzivel.
+Jinja2==3.1.6
+MarkupSafe==3.0.3
+blinker==1.9.0
+click==8.5.0

@@ -1,4 +1,9 @@
 @baseUrl = http://localhost:3000
+# Mesmo valor de ADMIN_API_TOKEN no .env.
+@adminToken = dev-admin-token-0123456789abcdef
+
+### Health check
+GET {{baseUrl}}/health
 
 ### Checkout - sucesso
 POST {{baseUrl}}/api/checkout
@@ -24,8 +29,24 @@ Content-Type: application/json
   "card": "5111222233334444"
 }
 
-### Relatório financeiro administrativo
+### Checkout - conta nova sem senha (400: senha deixou de ter default "123456")
+POST {{baseUrl}}/api/checkout
+Content-Type: application/json
+
+{
+  "usr": "Sem Senha",
+  "eml": "sem-senha@teste.com",
+  "c_id": 1,
+  "card": "4111222233334444"
+}
+
+### Relatório financeiro administrativo (exige credencial)
+GET {{baseUrl}}/api/admin/financial-report
+Authorization: Bearer {{adminToken}}
+
+### Relatório financeiro sem credencial (401)
 GET {{baseUrl}}/api/admin/financial-report
 
-### Deletar usuário
+### Deletar usuário (exclusão lógica + anonimização, 204)
 DELETE {{baseUrl}}/api/users/1
+Authorization: Bearer {{adminToken}}

@@ -1,0 +1,13 @@
+node_modules/
+
+# Segredos: nunca versionar. O modelo é o .env.example.
+.env
+.env.*
+!.env.example
+
+# Banco persistente e artefatos locais
+data/
+*.db
+*.db-journal
+*.log
+npm-debug.log*

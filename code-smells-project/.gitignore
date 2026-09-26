@@ -1,0 +1,11 @@
+# Segredos: nunca versionados (AP-02)
+.env
+
+# Banco local
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
