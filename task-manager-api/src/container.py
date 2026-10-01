@@ -20,6 +20,6 @@ class Container:
         self.tokens = TokenService(settings.secret_key, settings.token_ttl_seconds)
         self.tasks = TaskService(task_repository, user_repository, category_repository)
         self.users = UserService(user_repository, task_repository, settings.password_min_length)
-        self.categories = CategoryService(category_repository)
+        self.categories = CategoryService(category_repository, user_repository)
         self.auth = AuthService(user_repository, self.tokens)
         self.reports = ReportService(task_repository, user_repository, category_repository, self.users)

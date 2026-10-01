@@ -30,8 +30,20 @@ class TaskService:
             raise NotFound("Task não encontrada")
         return task
 
-    def create_task(self, data):
+    def create_task(self, data, actor=None):
+        """EXCEÇÃO CRÍTICA (AP-06): exige autenticação. A task é criada com o
+        user_id do ator, não do input. A correção do CRITICAL prevalece sobre
+        preservar o contrato original da rota.
+        """
+        if actor is None:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Autenticação necessária")
+        user = self._users.get(actor.user_id)
+        if user is None or not user.active:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Token inválido")
         values = {**TASK_DEFAULTS, **data}
+        values["user_id"] = user.id  # força o user_id do ator
         self._ensure_references_exist(values)
         task = Task(**values)
         self._tasks.add(task)
@@ -39,7 +51,21 @@ class TaskService:
         logger.info("Task criada: %s", task.id)
         return task
 
-    def update_task(self, task, changes):
+    def update_task(self, task, changes, actor=None):
+        """EXCEÇÃO CRÍTICA (AP-06): exige autenticação. Apenas admin ou o dono
+        da task pode atualizá-la. A correção do CRITICAL prevalece sobre preservar
+        o contrato original da rota.
+        """
+        if actor is None:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Autenticação necessária")
+        user = self._users.get(actor.user_id)
+        if user is None or not user.active:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Token inválido")
+        if not user.is_admin and task.user_id != user.id:
+            from ..errors import Forbidden
+            raise Forbidden("Sem permissão para alterar esta task")
         self._ensure_references_exist(changes)
         for field, value in changes.items():
             setattr(task, field, value)
@@ -48,8 +74,22 @@ class TaskService:
         logger.info("Task atualizada: %s", task.id)
         return task
 
-    def delete_task(self, task_id):
+    def delete_task(self, task_id, actor=None):
+        """EXCEÇÃO CRÍTICA (AP-06): exige autenticação. Apenas admin ou o dono
+        da task pode deletá-la. A correção do CRITICAL prevalece sobre preservar
+        o contrato original da rota.
+        """
         task = self.get_task(task_id)
+        if actor is None:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Autenticação necessária")
+        user = self._users.get(actor.user_id)
+        if user is None or not user.active:
+            from ..errors import Unauthenticated
+            raise Unauthenticated("Token inválido")
+        if not user.is_admin and task.user_id != user.id:
+            from ..errors import Forbidden
+            raise Forbidden("Sem permissão para deletar esta task")
         self._tasks.delete(task)
         self._tasks.commit()
         logger.info("Task deletada: %s", task_id)

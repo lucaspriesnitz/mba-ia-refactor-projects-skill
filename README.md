@@ -16,6 +16,11 @@ aplicação continua de pé).
 > a bateria do `api.http` em container `node:20` no projeto 2, 22/22 endpoints no
 > projeto 3. Nada aqui declara resultado que não foi medido: cada número desta
 > página vem de uma verificação registrada na seção C.
+>
+> Pela **EXCEÇÃO CRÍTICA (AP-06)** — desafios 6 e 7 da seção B — parte dessas rotas
+> passou a exigir credencial: 10 das 19 no projeto 1, 17 das 22 no projeto 3, 2 das 3
+> no projeto 2. "Respondem" significa rota presente e respondendo: `401` sem
+> credencial, resposta de domínio normal com ela, **zero 5xx** em qualquer perfil.
 
 ---
 
@@ -249,6 +254,53 @@ vez de reabrir o relatório inteiro como se tudo tivesse sido homologado. As sei
 mudanças estão documentadas em "O que muda para quem consome a API", no README
 do projeto 3.
 
+**6. EXCEÇÃO CRÍTICA (AP-06): fechar CRITICAL prevalece sobre preservar contrato.**
+Após feedback do avaliador, o SKILL.md foi ajustado para incluir uma exceção
+explícita na regra de preservação de contrato: quando um achado CRITICAL exige
+autenticação/autorização em uma rota (ex: DELETE aberto, operação destrutiva sem
+permissão), a correção **prevalece sobre preservar o contrato original da rota**.
+A rota passa a exigir credencial — isso é a correção, não uma quebra de contrato.
+
+O ajuste foi aplicado nos projetos 1 (`code-smells-project`) e 3 (`task-manager-api`):
+
+- **Projeto 1:** `DELETE /produtos/<id>`, `POST /pedidos`, `PUT /pedidos/<id>/status`,
+  `GET /relatorios/vendas`, `GET /usuarios`, `GET /usuarios/<id>` agora exigem autenticação
+  — e, pelo desafio 7 abaixo, também `POST /produtos`, `PUT /produtos/<id>`,
+  `GET /pedidos` e `GET /pedidos/usuario/<id>`.
+- **Projeto 3:** `DELETE /users/<id>`, `DELETE /tasks/<id>`, `DELETE /categories/<id>`,
+  `POST/PUT /tasks`, `POST/PUT/DELETE /categories`, `GET /reports/*`, `GET /users/*`,
+  `GET /tasks/*` agora exigem autenticação.
+
+O `anti-patterns.md` foi atualizado para documentar que AP-06 é CRITICAL quando
+há operação destrutiva ou escalada de privilégio sem autenticação. Os READMEs
+dos projetos documentam as mudanças de contrato na seção "EXCEÇÃO CRÍTICA (AP-06)".
+
+**7. A primeira versão da exceção não bastava, e o defeito estava na régua de
+severidade.** Com o desafio 6 aplicado, uma varredura **método a método** do projeto 1
+mostrou quatro rotas ainda abertas a anônimo: `POST /produtos` (criava produto),
+`PUT /produtos/<id>` (mudava preço e estoque de qualquer item), `GET /pedidos` e
+`GET /pedidos/usuario/<id>`. Elas sobreviveram porque o AP-06 mandava o contrário do que
+parecia: *"HIGH para rotas de leitura ou escrita não-destrutiva; CRITICAL quando
+destrutiva"*. Com a exceção valendo só para CRITICAL, **a escrita anônima estava
+explicitamente autorizada a continuar aberta** — e o `DELETE` protegido ao lado do `POST`
+e do `PUT` abertos, no mesmo arquivo, é a assinatura disso.
+
+Duas correções no catálogo, e a segunda é a que importa a longo prazo:
+
+- **Severidade:** escrita anônima em dado de negócio (criar/editar produto, preço,
+  estoque, pedido, status) agora é **CRITICAL**, junto com destruição, escalada de
+  privilégio e exposição de dado sensível. HIGH ficou reservado a **leitura** de dado
+  não-sensível que ainda assim deveria ser restrita.
+- **Procedimento de varredura:** o AP-06 agora manda listar a matriz
+  `método × rota × decorator` antes de concluir que está coberto, com a razão escrita:
+  `DELETE` salta aos olhos e `POST`/`PUT` não. Uma regra de severidade correta não
+  conserta um método de busca que só olha onde é fácil.
+
+Terceira correção, no mesmo movimento: **autenticar não é autorizar**. Uma rota
+"ver o meu" (`GET /pedidos/usuario/<id>`) protegida só por autenticação continua sendo
+enumeração por id, bastando qualquer conta — o AP-06 passou a exigir **posse** nesses
+casos, e foi assim que a rota ficou.
+
 ---
 
 ## C) Resultados
@@ -406,7 +458,10 @@ a serialização saiu do model (`to_dict()`) para schemas com allowlist de campo
 - [x] Error handling centralizado — `middlewares/error_handler.py`
 - [x] Entry point claro — `wsgi.py`
 - [x] Aplicação inicia sem erros
-- [x] Endpoints originais respondem corretamente — **19/19**
+- [x] Endpoints originais respondem corretamente — **19/19** rotas presentes e respondendo.
+  Pela EXCEÇÃO CRÍTICA (AP-06), **10 delas exigem credencial**: anônimo recebe `401`, e o
+  caminho autorizado devolve resposta de domínio normal (201/200). As 9 públicas por
+  contrato — catálogo, cadastro, login, `/`, `/health` — seguem abertas. Zero 5xx.
 
 ### Checklist de validação — Projeto 2
 
@@ -461,7 +516,10 @@ a serialização saiu do model (`to_dict()`) para schemas com allowlist de campo
 - [x] Error handling centralizado — `middlewares/error_handler.py`
 - [x] Entry point claro — `wsgi.py` (produção/CLI) e `app.py` (desenvolvimento)
 - [x] Aplicação inicia sem erros
-- [x] Endpoints originais respondem corretamente — **22/22**
+- [x] Endpoints originais respondem corretamente — **22/22** rotas presentes e respondendo.
+  Pela EXCEÇÃO CRÍTICA (AP-06), **17 delas exigem credencial**: anônimo recebe `401`, e com
+  token de admin voltam 200/201. Abertas por contrato: `/`, `/health`, `GET /categories`,
+  `POST /users` (cadastro) e `POST /login`. Zero 5xx.
 
 #### A prova mais forte da pausa de confirmação está no projeto 3
 
@@ -507,6 +565,29 @@ Validação conferida de forma independente, com a aplicação de pé:
   negativo. O código original vendia a descoberto nesse cenário.
 - **Varredura final:** nenhum `print`, `str(e)`, segredo hardcoded,
   `check_same_thread` ou global mutável no código novo.
+
+**Remedição de 2026-09-30, depois da EXCEÇÃO CRÍTICA (AP-06).** Os números acima foram
+medidos em 2026-09-24, quando todas as 19 rotas respondiam a anônimo. A varredura foi
+repetida no estado atual, agora **método a método** — relatório completo em
+[`audit-project-1-rev2.md`](reports/audit-project-1-rev2.md):
+
+- **Boot:** limpo, **19/19 rotas registradas** (paridade preservada).
+- **Matriz completa:** **zero rotas sensíveis abertas a anônimo.** As 10 que exigem
+  credencial devolvem 401; as 9 públicas por contrato (`/`, `/health`, as três leituras
+  de catálogo, `POST /usuarios`, `POST /login`) seguem 200/201.
+- **Caminho autorizado:** com `admin`, `POST /produtos` 201, `PUT`/`DELETE /produtos/<id>`
+  200, `GET /pedidos` 200, `GET /relatorios/vendas` 200, `GET /usuarios` 200. **Zero 5xx.**
+- **Papel discrimina:** com token de cliente, `GET /pedidos` e `POST /produtos` → **403**.
+- **Posse em `GET /pedidos/usuario/<id>`:** próprio 200, de outro **403**, admin 200.
+- **Auditoria pós-patch:** **CRITICAL 0** (eram 7), **HIGH 0**, 4 MEDIUM, 2 LOW.
+
+**Esta remedição achou quatro rotas que o patch de 2026-09-28 havia deixado abertas**, e
+elas são o ponto do desafio 6: `POST /produtos` (anônimo criava produto),
+`PUT /produtos/<id>` (anônimo zerava preço e estoque de qualquer item), `GET /pedidos` e
+`GET /pedidos/usuario/<id>`. O patch fechou o `DELETE` do catálogo e passou direto pelo
+`POST` e pelo `PUT` da mesma entidade, três linhas acima no mesmo arquivo — porque a
+**regra do próprio catálogo autorizava**: AP-06 dizia "HIGH para escrita não-destrutiva,
+CRITICAL quando destrutiva". A regra foi corrigida (ver desafio 7 na seção B).
 
 ### Logs — o projeto 2 **antes** da refatoração (baseline medido)
 
@@ -594,6 +675,45 @@ Validação conferida de forma independente, com a aplicação de pé em
 - **N+1 eliminado:** `GET /tasks`, `/users` e `/categories` passaram a fazer 2
   queries cada (antes, `GET /tasks` fazia 1+2N).
 
+**Remedição de 2026-09-29, depois da EXCEÇÃO CRÍTICA (AP-06).** Como no projeto 1, os
+números acima são de antes do patch, quando as 22 rotas respondiam a anônimo. No estado
+atual:
+
+- **Boot:** limpo, **22/22 rotas registradas**.
+- **As 17 rotas fechadas** (as três de `DELETE`, as escritas de task e categoria,
+  `PUT /users/<id>`, `GET /reports/*`, `GET /users*` e `GET /tasks*`): **401 para anônimo
+  em todas as 17**, e resposta de domínio normal com token de admin — 200/201, **zero 5xx**.
+- **Rotas abertas por contrato** (`/`, `/health`, `GET /categories`, `POST /users`):
+  seguem 200/201.
+- **Nenhuma rota que deveria exigir credencial ficou aberta** (verificado rota a rota).
+- **Auditoria pós-patch:** **CRITICAL 0** (eram 4 na auditoria original), 2 HIGH,
+  9 MEDIUM, 7 LOW — [`audit-project-3-rev4.md`](reports/audit-project-3-rev4.md). Os dois
+  HIGH são de modelo de posse, não de autenticação.
+
+### As revisões de auditoria
+
+Além dos três relatórios da rodada original, o patch da EXCEÇÃO CRÍTICA gerou revisões
+que registram o fechamento dos CRITICAL de AP-06:
+
+| Relatório | Projeto | Data | CRITICAL | Total |
+|---|---|---|---|---|
+| [`audit-project-1.md`](reports/audit-project-1.md) | 1 | 2026-09-24 | 7 | 27 |
+| [`audit-project-1-rev2.md`](reports/audit-project-1-rev2.md) | 1 | 2026-09-29 | **0** | 6 |
+| [`audit-project-2.md`](reports/audit-project-2.md) | 2 | 2026-09-24 | 4 | 22 |
+| [`audit-project-3.md`](reports/audit-project-3.md) | 3 | 2026-09-25 | 4 | 23 |
+| [`audit-project-3-rev2.md`](reports/audit-project-3-rev2.md) | 3 | 2026-09-28 | — | 13 |
+| [`audit-project-3-rev3.md`](reports/audit-project-3-rev3.md) | 3 | 2026-09-28 | — | 16 |
+| [`audit-project-3-rev4.md`](reports/audit-project-3-rev4.md) | 3 | 2026-09-28 | **0** | 18 |
+
+O projeto 2 não precisou de revisão, e a razão é o próprio ponto do desafio 6: o AP-06
+dele (`GET /api/admin/financial-report` e `DELETE /api/users/:id` abertos a anônimo) **já
+havia sido fechado na Fase 3 original** — as duas rotas exigem credencial de admin desde
+então (`src/routes/index.js`, `src/middlewares/auth.js`). Ou seja, a skill aplicou nele, já na rodada
+original, exatamente a correção que o avaliador depois teve de exigir nos projetos 1 e 3;
+a exceção que o desafio 6 descreve tornou esse comportamento **regra explícita** em vez de
+julgamento caso a caso. A skill do projeto 2 foi ressincronizada com essa versão — as três
+cópias voltaram a ser byte-idênticas.
+
 ### Como a skill se comportou em stacks diferentes
 
 - **Mesma skill, zero adaptação.** Os arquivos copiados para o projeto 2 são
@@ -624,6 +744,23 @@ Validação conferida de forma independente, com a aplicação de pé em
   pastas que já existiam** e acrescentou só as camadas ausentes. As 12
   transformações do playbook não foram aplicadas em bloco em lugar nenhum — em
   cada projeto entrou o subconjunto que os achados justificavam.
+
+### Critérios de Aceite do enunciado — os 4, nos 3 projetos
+
+Todos obrigatórios em 3/3. Cada célula aponta onde a evidência está nesta página.
+
+| Critério | Projeto 1 | Projeto 2 | Projeto 3 |
+|---|---|---|---|
+| **Fase 1 detecta a stack corretamente** | ✅ Python 3 / Flask 3.1.1 | ✅ Node.js CommonJS / Express 4.22.1 + sqlite3 | ✅ Python 3.12 / Flask 3.0.0 + Flask-SQLAlchemy |
+| **Fase 2 encontra ≥ 5 findings** | ✅ **27** | ✅ **22** | ✅ **23** |
+| **Fase 2 traz ≥ 1 CRITICAL ou HIGH** | ✅ 7 CRITICAL + 4 HIGH | ✅ 4 CRITICAL + 6 HIGH | ✅ 4 CRITICAL + 5 HIGH |
+| **Fase 3: a aplicação funciona após a refatoração** | ✅ boot limpo, 19/19 rotas, zero 5xx | ✅ boot em `node:20`, bateria do `api.http` passando | ✅ boot limpo, 22/22 rotas, zero 5xx |
+
+Os quatro mínimos foram superados com margem: o menor número de achados é 22, contra
+o mínimo de 5, e os três projetos têm CRITICAL **e** HIGH, contra o mínimo de um dos
+dois. A medição de "a aplicação funciona" está nos blocos de log acima e nos três
+checklists de validação; depois da EXCEÇÃO CRÍTICA ela foi **repetida método a
+método** nos projetos 1 e 3, e o resultado está nos blocos de remedição.
 
 ---
 

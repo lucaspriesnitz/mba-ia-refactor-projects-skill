@@ -5,11 +5,9 @@ mas não emitia credencial -- nenhuma rota posterior tinha como saber quem chama
 Agora o login emite um token assinado (`AuthService`) e as rotas sensíveis o
 exigem via `Authorization: Bearer <token>`.
 
-Escopo aplicado nesta refatoração: as rotas administrativas. As rotas de negócio
-(`GET /usuarios`, `GET /pedidos`, `DELETE /produtos/<id>`...) continuam abertas
-porque protegê-las mudaria a resposta de endpoints que a Fase 2 homologou como
-preservados -- a decisão de fechá-las está registrada no README como próximo
-passo, e o mecanismo já está pronto para isso (basta aplicar o decorator).
+EXCEÇÃO CRÍTICA (AP-06): rotas destrutivas (DELETE /produtos/<id>) e operações
+administrativas (PUT /pedidos/<id>/status) agora exigem autenticação. A correção
+do CRITICAL prevalece sobre preservar o contrato original da rota.
 """
 
 from functools import wraps

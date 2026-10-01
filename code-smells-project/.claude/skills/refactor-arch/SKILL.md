@@ -28,6 +28,11 @@ que encontrou, seguindo os arquivos de referência.
    qualquer arquivo. Nenhuma escrita acontece na Fase 1 ou 2.
 2. **Preserve o comportamento**: os endpoints originais e seus contratos
    (rotas, métodos, formato de resposta) continuam funcionando após a Fase 3.
+   **EXCEÇÃO CRÍTICA**: quando um achado CRITICAL exige autenticação/autorização
+   em uma rota (ex: DELETE aberto, operação destrutiva sem permissão), a correção
+   **prevalece sobre preservar o contrato original**. A rota passa a exigir
+   credencial — isso é a correção, não uma quebra de contrato. Documente no
+   relatório quais rotas mudaram de contrato e por quê.
 3. **Ancore todo achado em `arquivo:linha`.** "Código ruim" não é achado;
    "SQL montado por concatenação em `models.py:48`" é.
 4. **Adapte-se ao ponto de partida.** Um monólito de 1 arquivo e um projeto já

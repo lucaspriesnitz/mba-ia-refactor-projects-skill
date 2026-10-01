@@ -75,21 +75,54 @@ comando de manutenção com autenticação; nunca SQL vindo do cliente.
 
 ---
 
-## T-05 · Proteger rota sensível com auth (fecha AP-06) — HIGH
+## T-05 · Proteger rota sensível com auth (fecha AP-06) — CRITICAL/HIGH
 
 **Antes**
 ```python
 @app.route("/admin/reset-db", methods=["POST"])
-def reset_database(): ...   # qualquer um reseta
+def reset_database(): ...        # qualquer um reseta
+
+@app.route("/produtos", methods=["POST"])
+def criar_produto(): ...         # anonimo cria
+
+@app.route("/produtos/<int:id>", methods=["PUT"])
+def atualizar_produto(id): ...   # anonimo zera o preco
+
+@app.route("/pedidos/usuario/<int:uid>")
+def pedidos_do_usuario(uid): ... # qualquer um le o historico de qualquer um
 ```
 **Depois**
 ```python
 @app.route("/admin/reset-db", methods=["POST"])
-@require_auth(role="admin")     # middleware/decorator central
+@require_auth(role="admin")      # middleware/decorator central
 def reset_database(): ...
+
+@app.route("/produtos", methods=["POST"])
+@require_auth(role="admin")      # escrita em dado de negocio: admin
+def criar_produto(): ...
+
+@app.route("/produtos/<int:id>", methods=["PUT"])
+@require_auth(role="admin")
+def atualizar_produto(id): ...
+
+@app.route("/pedidos/usuario/<int:uid>")
+@require_auth()                  # autenticar NAO basta aqui:
+def pedidos_do_usuario(uid):
+    portador = usuario_atual()
+    if portador["papel"] != "admin" and portador["sub"] != uid:
+        raise NaoAutorizado()    # ... precisa de POSSE
+    ...
 ```
 Autenticação e autorização como middleware reutilizável, não checagem colada em
-cada handler.
+cada handler. Três regras que esta transformação carrega:
+
+1. **Enumere as rotas de escrita método a método.** Proteger o `DELETE` e deixar o
+   `POST`/`PUT` da mesma entidade aberto é o erro mais comum — e o mais caro, porque
+   dá a impressão de que o AP-06 foi tratado.
+2. **Escrita anônima em dado de negócio é CRITICAL**, não HIGH. Não precisa de
+   `DELETE` para o dano existir: anônimo zerando preço já é dano imediato.
+3. **Rota "ver o meu" exige posse**, não só credencial. Com apenas autenticação ela
+   continua sendo enumeração por id, bastando qualquer conta.
 
 ---
 

@@ -129,20 +129,26 @@ propósito:
 1. `password` (hash) **saiu** das respostas de `GET/POST/PUT /users*` e `POST /login` (AP-03, homologado).
 2. Entrada inválida que antes derrubava o handler com 500 agora é **400** (homologado).
 3. `POST /login` → `token` agora é um JWT real (continua string, mesmo campo).
-4. `PUT /users/<id>` com `role`, `active` ou `password`, e `POST /users` com `role` ≠ `user`, exigem `Authorization: Bearer <token>` (401/403 sem permissão). Os demais campos e rotas seguem sem token.
+4. `PUT /users/<id>` com `role`, `active` ou `password`, e `POST /users` com `role` ≠ `user`, exigem `Authorization: Bearer <token>` (401/403 sem permissão).
 5. Senha mínima passou de 4 para 12 caracteres (configurável).
 6. `DELETE /users/<id>` desassocia as tasks do usuário em vez de apagá-las; `DELETE /categories/<id>` também desassocia (antes deixava referência pendurada).
 7. CORS só para origens em `CORS_ORIGINS`.
 8. Corpo ausente/não-JSON em rotas de escrita responde 400 `Dados inválidos` (antes 415 HTML ou 500).
+9. **EXCEÇÃO CRÍTICA (AP-06):** rotas destrutivas e administrativas agora exigem autenticação. A correção do CRITICAL prevalece sobre preservar o contrato original da rota:
+   - `DELETE /users/<id>` exige token do próprio usuário ou admin
+   - `DELETE /tasks/<id>` exige token do dono da task ou admin
+   - `DELETE /categories/<id>` exige token admin
+   - `POST/PUT /tasks` exigem token (criação/edição de tasks)
+   - `POST/PUT/DELETE /categories` exigem token admin
+   - `GET /reports/*` exigem token admin
+   - `GET /users`, `GET /users/<id>`, `GET /users/<id>/tasks` exigem token
+   - `GET /tasks`, `GET /tasks/<id>`, `GET /tasks/search`, `GET /tasks/stats` exigem token
+   - `PUT /users/<id>` exige token do próprio usuário ou admin
 
 ## Próximos passos (fora do escopo homologado)
 
-- **Autenticação nas demais rotas.** `DELETE /users/<id>`, `DELETE /tasks/<id>`,
-  `GET /reports/summary` etc. seguem abertas: exigir token nelas mudaria a resposta
-  de endpoints que a Fase 2 homologou como preservados. O mecanismo está pronto
-  (`middlewares/auth.py` + `UserService.resolve_actor`).
+- **Escopo por dono nas leituras.** Atualmente qualquer usuário autenticado vê todas as tasks e usuários. O modelo ideal é: admin vê tudo, demais veem apenas as próprias tasks.
 - **Rate limiting / lockout em `POST /login`.**
-- **Notificações:** se forem necessárias, reimplementar com config por env, fila
-  assíncrona, timeout explícito e persistência em tabela.
-- **Timezone:** datas continuam armazenadas como UTC *naive*; migrar para colunas
-  com timezone exige migration de dados.
+- **Notificações:** se forem necessárias, reimplementar com config por env, fila assíncrona, timeout explícito e persistência em tabela.
+- **Timezone:** datas continuam armazenadas como UTC *naive*; migrar para colunas com timezone exige migration de dados.
+- **Suíte de testes automatizados.**

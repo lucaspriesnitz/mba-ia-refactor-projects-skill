@@ -3,10 +3,18 @@
 Compare com `controllers.py:24-58`, que tinha 9 validações inline, a lista de
 categorias literal e um `try/except` de função inteira. Toda essa regra saiu para
 `services/produto_service.py` e `models/validators.py`.
+
+EXCEÇÃO CRÍTICA (AP-06): as três rotas de escrita do catálogo -- POST /produtos,
+PUT /produtos/<id> e DELETE /produtos/<id> -- exigem autenticação admin. A correção
+do CRITICAL prevalece sobre preservar o contrato original da rota.
+
+As leituras (`GET /produtos`, `GET /produtos/<id>`, `GET /produtos/busca`) seguem
+públicas: é catálogo de loja, e nenhuma delas projeta dado sensível.
 """
 
 from flask import Blueprint, request
 
+from ..middlewares.auth import requer_papel
 from ..models.validators import validar_preco_de_filtro
 from .envelope import resposta_de_sucesso
 from .suporte import container, corpo_json, parametros_de_pagina
@@ -42,6 +50,7 @@ def buscar_produto(id):
 
 
 @produto_bp.post("/produtos")
+@requer_papel("admin")
 def criar_produto():
     produto_id = container().produto_service.criar(corpo_json())
     return resposta_de_sucesso(
@@ -50,12 +59,14 @@ def criar_produto():
 
 
 @produto_bp.put("/produtos/<int:id>")
+@requer_papel("admin")
 def atualizar_produto(id):
     container().produto_service.atualizar(id, corpo_json())
     return resposta_de_sucesso(mensagem="Produto atualizado")
 
 
 @produto_bp.delete("/produtos/<int:id>")
+@requer_papel("admin")
 def deletar_produto(id):
     container().produto_service.remover(id)
     return resposta_de_sucesso(mensagem="Produto deletado")

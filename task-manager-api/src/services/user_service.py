@@ -63,6 +63,13 @@ class UserService:
         return user
 
     def update_user(self, user, changes, actor=None):
+        """EXCEÇÃO CRÍTICA (AP-06): exige autenticação. Apenas o próprio usuário
+        ou admin pode atualizar dados. A correção do CRITICAL prevalece sobre
+        preservar o contrato original da rota.
+        """
+        caller = self.resolve_actor(actor)
+        if not caller.is_admin and caller.id != user.id:
+            raise Forbidden("Sem permissão para alterar este usuário")
         if any(field in changes for field in ADMIN_ONLY_FIELDS):
             self._require_admin(actor, "alterar role/active")
         if "password" in changes:
@@ -87,10 +94,18 @@ class UserService:
         logger.info("Usuário atualizado: %s", user.id)
         return user
 
-    def delete_user(self, user_id):
+    def delete_user(self, user_id, actor=None):
         """As tasks do usuário são desassociadas (FK `ON DELETE SET NULL`), não
-        apagadas -- antes o handler apagava todas à mão (`user_routes.py:140-142`)."""
+        apagadas -- antes o handler apagava todas à mão (`user_routes.py:140-142`).
+        
+        EXCEÇÃO CRÍTICA (AP-06): exige autenticação. Apenas admin ou o próprio
+        usuário pode deletar a conta. A correção do CRITICAL prevalece sobre
+        preservar o contrato original da rota.
+        """
         user = self.get_user(user_id)
+        caller = self.resolve_actor(actor)
+        if not caller.is_admin and caller.id != user.id:
+            raise Forbidden("Sem permissão para deletar este usuário")
         self._users.delete(user)
         self._users.commit()
         logger.info("Usuário deletado: %s", user_id)

@@ -134,12 +134,43 @@ handler não lê o corpo, não interpreta e não executa nada — só levanta
 antigo. A justificativa também está no docstring de
 `src/controllers/admin_controller.py`, junto do código.
 
+### EXCEÇÃO CRÍTICA (AP-06): autenticação obrigatória em escrita e em dado de negócio
+
+A correção do CRITICAL prevalece sobre preservar o contrato original da rota. Toda
+rota de **escrita** e todo acesso a **dado de negócio** exige
+`Authorization: Bearer <token>`:
+
+| Rota | Exigência |
+|---|---|
+| `POST /produtos` | papel `admin` |
+| `PUT /produtos/<id>` | papel `admin` |
+| `DELETE /produtos/<id>` | papel `admin` |
+| `GET /pedidos` | papel `admin` |
+| `GET /pedidos/usuario/<id>` | autenticado **e dono do id**, ou `admin` |
+| `POST /pedidos` | autenticado |
+| `PUT /pedidos/<id>/status` | papel `admin` |
+| `GET /relatorios/vendas` | papel `admin` |
+| `GET /usuarios` | autenticado |
+| `GET /usuarios/<id>` | autenticado |
+| `POST /admin/query` · `POST /admin/reset-db` | `admin` (e `/admin/query` recusa sempre) |
+
+Seguem **públicas**, por serem catálogo de loja ou porta de entrada:
+`GET /produtos`, `GET /produtos/<id>`, `GET /produtos/busca`, `POST /usuarios`
+(cadastro), `POST /login`, `GET /` e `GET /health`.
+
+Duas notas sobre o critério, porque são o aprendizado desta rodada:
+
+1. **Escrita anônima é CRITICAL mesmo sem `DELETE`.** `POST /produtos` e
+   `PUT /produtos/<id>` estavam abertos ao lado de um `DELETE /produtos/<id>` já
+   protegido — um anônimo criava produto e zerava preço e estoque de qualquer item.
+   O `DELETE` salta aos olhos; a criação e a edição ao lado dele, não.
+2. **Em "ver o meu", autenticar não basta: precisa de posse.**
+   `GET /pedidos/usuario/<id>` só com autenticação continuaria sendo enumeração do
+   histórico de compra por id, bastando qualquer conta. A checagem é de dono, com
+   `admin` como exceção.
+
 ## Próximo passo conhecido (fora do escopo homologado)
 
-O mecanismo de autenticação está pronto e aplicado nas rotas administrativas,
-mas as rotas de negócio (`GET /usuarios`, `GET /pedidos`,
-`PUT /pedidos/<id>/status`, `DELETE /produtos/<id>`) **seguem abertas**: exigir
-credencial nelas mudaria a resposta de endpoints que a Fase 2 homologou como
-preservados, o que é uma decisão de contrato do dono. Para fechá-las, basta
-aplicar `@requer_autenticacao` / `@requer_papel("admin")` nos controllers
-correspondentes e acrescentar a checagem de propriedade por usuário nos pedidos.
+- **Escopo por dono nas leituras de usuário.** `GET /pedidos` é admin-only e `GET /pedidos/usuario/<id>` já checa posse; `GET /usuarios` e `GET /usuarios/<id>`, porém, seguem abertas a qualquer conta autenticada. O modelo ideal reduz a projeção para não-admin.
+- **Rate limiting / lockout em `POST /login`.**
+- **Suíte de testes automatizados.**

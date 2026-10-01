@@ -61,13 +61,31 @@ apresentados como segurança.
 autenticação, não string vinda do cliente.
 *Visto em `app.py:59` (`/admin/query`).*
 
-### AP-06 · Rota destrutiva/sensível sem autenticação — HIGH
-**Sinal:** rota que apaga/reseta dados ou expõe informação privada sem checagem
-de identidade/permissão (`/admin/reset-db`, `DELETE` aberto).
-**Impacto:** qualquer um destrói ou lê dados.
+### AP-06 · Rota destrutiva/sensível/de escrita sem autenticação — HIGH/CRITICAL
+**Sinal:** rota que apaga ou reseta dados, expõe informação privada, **ou escreve em
+dado de negócio** sem checagem de identidade/permissão (`/admin/reset-db`, `DELETE`
+aberto, `POST`/`PUT` de catálogo aberto).
+**Severidade:** **CRITICAL** quando, sem qualquer autenticação, a rota permite
+operação destrutiva (DELETE, reset), escalada de privilégio (alterar role/senha de
+outro usuário), exposição de dados sensíveis, **ou qualquer escrita em dado de
+negócio** (criar/editar produto, preço, estoque, pedido, status). HIGH só para
+**leitura** de dado não-sensível que ainda assim deveria ser restrita.
+**Impacto:** qualquer um destrói, lê dados, toma conta de contas ou adultera o
+catálogo — anônimo zerando o preço de um produto é dano de negócio imediato, mesmo
+sem `DELETE` nenhum.
 **Recomendação:** middleware/decorator de auth + autorização por papel; remover o
-que não deveria existir.
-*Visto em `app.py:47` (`/admin/reset-db` sem auth).*
+que não deveria existir. **Na Fase 3, a correção prevalece sobre preservar o
+contrato original da rota** — a rota passa a exigir credencial, e isso é a
+correção esperada, não uma quebra de contrato. Quando a rota é "ver o meu", a
+correção não para na autenticação: exige **posse** (o próprio id, ou admin), senão a
+rota continua sendo enumeração por id com credencial qualquer.
+**Armadilha de varredura, e ela já custou uma reprova:** `DELETE` salta aos olhos e
+`POST`/`PUT` não. Enumere as rotas de escrita **método a método** e confira o
+decorator de cada uma — o padrão real é fechar a destrutiva e esquecer a criação e a
+edição ao lado dela. Na Fase 2, liste a matriz `método × rota × decorator` antes de
+concluir que o AP-06 está coberto.
+*Visto em `app.py:47` (`/admin/reset-db` sem auth) e em `controllers.py:24,64`
+(`POST /produtos` e `PUT /produtos/<id>` sem auth, ao lado de um `DELETE` protegido).*
 
 ### AP-07 · `DEBUG`/modo verboso ligado no código — HIGH
 **Sinal:** `DEBUG = True`, `app.debug`, stack trace exposto ao cliente, config de
